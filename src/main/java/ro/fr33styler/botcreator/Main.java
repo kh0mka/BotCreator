@@ -13,12 +13,35 @@ import java.util.Deque;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.io.*;
 
 public class Main {
 
     public static final Logger LOGGER = Logger.getLogger("BotCreator");
-
     private static final Deque<Bot> bots = new ArrayDeque<>();
+
+    private static List<String> loadNicknames(String filePath) {
+        List<String> nicknames = new ArrayList<>();
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String nickname = line.trim();
+                // Проверяем, что ник соответствует требованиям
+                if (nickname.length() >= 4 && nickname.length() <= 16 && nickname.matches("[a-zA-Z0-9]+")) {
+                    nicknames.add(nickname);
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, "Failed to read nicknames file: " + e.getMessage());
+        }
+
+        if (nicknames.isEmpty()) {
+            LOGGER.log(Level.WARNING, "No valid nicknames found in the file!");
+        }
+
+        return nicknames;
+    }
 
     public static void main(String[] args) {
 
@@ -113,6 +136,10 @@ public class Main {
         JButton connect = new JButton("Connect");
         topPanel.add(connect);
 
+        topPanel.add(new JLabel("Nickname File: "));
+        JTextField nicknameFileInput = new JTextField("nicknames.txt", 20);
+        topPanel.add(nicknameFileInput);
+
         connect.addActionListener(action -> {
 
             int port;
@@ -136,21 +163,43 @@ public class Main {
                 return;
             }
 
+            String host = hostInput.getText();
+            String nicknameFile = nicknameFileInput.getText();
+
+            // Loading nicknames from a specified file
+            List<String> availableNicknames = loadNicknames(nicknameFile);
+
+            if (availableNicknames.isEmpty()) {
+                LOGGER.log(Level.SEVERE, "No valid nicknames found in the file!");
+                return;
+            }
+
             connect.setEnabled(false);
             connect.setText("Connecting...");
 
-            String host = hostInput.getText();
-
+            // Creating or deleting bots
             while (bots.size() < amount) {
                 int id = bots.size();
-                bots.addLast(new Bot("Bot_" + id));
-                botsBox.addItem("Bot_" + id);
+                String botName;
+
+                // Selecting a random nickname from the list
+                if (!availableNicknames.isEmpty()) {
+                    botName = availableNicknames.remove((int) (Math.random() * availableNicknames.size()));
+                } else {
+                    LOGGER.log(Level.WARNING, "Not enough nicknames, skipping bot creation.");
+                    break;
+                }
+
+                bots.addLast(new Bot(botName));
+                botsBox.addItem(botName);
             }
             while (bots.size() > amount) {
                 Bot bot = bots.removeLast();
                 bot.disconnect();
                 botsBox.removeItem(bot.getName());
             }
+
+            // Connecting bots
             for (Bot client : bots) {
                 if (!client.isOnline()) {
                     client.connect(host, port);
